@@ -881,6 +881,7 @@ name = "oca-dag"
 version = "0.1.0"
 dependencies = [
  "indexmap",
+ "isolang",
  "oca-ast",
  "oca-bundle",
  "serde",

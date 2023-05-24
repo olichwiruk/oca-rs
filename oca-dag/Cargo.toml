@@ -13,3 +13,9 @@ sled = "0.34.7"
 oca-bundle = { path = "../oca-bundle" }
 oca-ast = { path = "../oca-ast" }
 indexmap = { version = "1.9.3", features = ["serde"]}
+
+[dependencies.isolang]
+# version = "2.2.0"
+# needs to be loaded from source util the PR #35 is released
+git = "https://github.com/humenda/isolang-rs"
+features = ["serde"]
