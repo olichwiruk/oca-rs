@@ -34,7 +34,7 @@ impl AddInstruction {
                                         debug!("Parsed attribute: {:?} = {:?}", key, value);
 
                                         // TODO find out how to parse nested objects
-                                        attributes.insert(key, NestedValue::Value(value));
+                                        attributes.insert(key, value);
                                     } else {
                                         debug!("Skipping attribute");
                                     }
@@ -93,6 +93,22 @@ impl AddInstruction {
                     object_kind = Some(ObjectKind::Overlay(OverlayType::Format));
                     helpers::extract_content(object)
                 }
+                Rule::conformance => {
+                    object_kind = Some(ObjectKind::Overlay(OverlayType::Conformance));
+                    helpers::extract_content(object)
+                }
+                Rule::cardinality => {
+                    object_kind = Some(ObjectKind::Overlay(OverlayType::Cardinality));
+                    helpers::extract_content(object)
+                }
+                Rule::entry_code => {
+                    object_kind = Some(ObjectKind::Overlay(OverlayType::EntryCode));
+                    helpers::extract_content(object)
+                }
+                Rule::entry => {
+                    object_kind = Some(ObjectKind::Overlay(OverlayType::Entry));
+                    helpers::extract_content(object)
+                }
                 Rule::flagged_attrs => {
                     object_kind = Some(ObjectKind::CaptureBase);
                     Some(Content {
@@ -135,11 +151,13 @@ mod tests {
             ("ADD attribute name=Text", true),
             ("add attribute name=Text", true),
             ("add attribute name=Random", false),
+            (r#"add label en attrs name="Random asd""#, true),
         ];
 
         // loop over instructions to check if the are meeting the requirements
         for (instruction, is_valid) in instructions {
             let parsed_instruction = OCAfileParser::parse(Rule::add, instruction);
+            println!("Instruction: {:?}", instruction);
 
             match parsed_instruction {
                 Ok(mut parsed_instruction) => {

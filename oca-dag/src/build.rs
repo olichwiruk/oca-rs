@@ -1,11 +1,17 @@
+use oca_bundle::state::oca::overlay::unit::{ Unit, AttributeUnit, MeasurementSystem, MeasurementUnit, ImperialUnit, MetricUnit };
+use oca_bundle::state::oca::overlay::format::Formats;
+use oca_bundle::state::oca::overlay::entry::Entries;
+use oca_bundle::state::oca::overlay::entry_code::EntryCodes;
+use oca_bundle::state::oca::overlay::cardinality::Cardinalitys;
 use oca_bundle::state::oca::overlay::conformance::Conformances;
 use oca_bundle::state::oca::overlay::information::Information;
 use oca_bundle::state::oca::overlay::character_encoding::CharacterEncodings;
 use oca_bundle::state::oca::overlay::meta::Metas;
 use oca_bundle::state::oca::overlay::label::Labels;
 use std::str::FromStr;
+use std::collections::HashMap;
 use ocaast::ast;
-use oca_bundle::state::{oca::OCABox, oca::OCABundle, encoding::Encoding, attribute::{Attribute, AttributeType}};
+use oca_bundle::state::{oca::OCABox, oca::OCABundle, encoding::Encoding, attribute::{Attribute, AttributeType}, entry_codes::EntryCodes as EntryCodesValue, entries::EntriesElement};
 
 pub fn apply_command(base: Option<OCABox>, op: ast::Command) -> OCABox {
     let mut digests: Vec<u8> = Vec::new();
@@ -25,6 +31,7 @@ pub fn apply_command(base: Option<OCABox>, op: ast::Command) -> OCABox {
                             for (attr_name, attr_type_value) in attributes {
                                 let mut attribute = Attribute::new(attr_name.clone());
                                 if let ast::NestedValue::Value(attr_value) = attr_type_value {
+                                    // println!("attr_value: {}", attr_value);
                                     if let Ok(attribute_type) = AttributeType::from_str(attr_value) {
                                         attribute.set_attribute_type(attribute_type);
                                     }
@@ -131,6 +138,129 @@ pub fn apply_command(base: Option<OCABox>, op: ast::Command) -> OCABox {
                                 }
                             }
                         },
+                        ast::OverlayType::Format => {
+                            if let Some(ref content) = op.content {
+                                if let Some(ref attributes) = content.attributes {
+                                    for (attr_name, attr_type_value) in attributes {
+                                        let mut attribute = oca.attributes.get(attr_name).unwrap().clone();
+                                        if let ast::NestedValue::Value(attr_format) = attr_type_value {
+                                            attribute.set_format(attr_format.clone());
+                                        }
+                                        oca.add_attribute(attribute);
+                                    }
+                                }
+                            }
+                        }
+                        ast::OverlayType::Unit => {
+                            if let Some(ref content) = op.content {
+                                let mut unit_system_op = None;
+                                if let Some(ref properties) = content.properties {
+                                    let mut mut_properties = properties.clone();
+                                    let unit_system_prop = mut_properties.remove("unit_system");
+                                    if let Some(ast::NestedValue::Value(unit_system_str)) = unit_system_prop {
+                                        unit_system_op = MeasurementSystem::from_str(&unit_system_str).ok();
+                                    }
+                                }
+                                if let Some(unit_system) = unit_system_op {
+                                    if let Some(ref attributes) = content.attributes {
+                                        for (attr_name, attr_type_value) in attributes {
+                                            let mut attribute = oca.attributes.get(attr_name).unwrap().clone();
+                                            if let ast::NestedValue::Value(attr_unit) = attr_type_value {
+
+                                                let mut unit = None;
+                                                match unit_system {
+                                                    MeasurementSystem::Metric => {
+                                                        unit = Some(MeasurementUnit::Metric(MetricUnit::from_str(attr_unit).unwrap_or_else(|_| panic!("Invalid metric unit: {attr_unit}"))))
+                                                    },
+                                                    MeasurementSystem::Imperial => {
+                                                        unit = Some(MeasurementUnit::Imperial(ImperialUnit::from_str(attr_unit).unwrap_or_else(|_| panic!("Invalid imperial unit: {attr_unit}"))))
+                                                    }
+                                                }
+                                                attribute.set_unit(
+                                                    AttributeUnit {
+                                                        measurement_system: unit_system.clone(),
+                                                        unit: unit.unwrap()
+                                                    }
+                                                );
+                                            }
+                                            oca.add_attribute(attribute);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        ast::OverlayType::Cardinality => {
+                            if let Some(ref content) = op.content {
+                                if let Some(ref attributes) = content.attributes {
+                                    for (attr_name, attr_type_value) in attributes {
+                                        let mut attribute = oca.attributes.get(attr_name).unwrap().clone();
+                                        if let ast::NestedValue::Value(attr_cardinality) = attr_type_value {
+                                            attribute.set_cardinality(attr_cardinality.clone());
+                                        }
+                                        oca.add_attribute(attribute);
+                                    }
+                                }
+                            }
+                        },
+                        ast::OverlayType::EntryCode => {
+                            if let Some(ref content) = op.content {
+                                if let Some(ref attributes) = content.attributes {
+                                    for (attr_name, attr_type_value) in attributes {
+                                        let mut attribute = oca.attributes.get(attr_name).unwrap().clone();
+                                        match attr_type_value {
+                                            ast::NestedValue::Value(attr_entry_codes_sai) => {
+                                                attribute.set_entry_codes(EntryCodesValue::Sai(attr_entry_codes_sai.clone()));
+                                            },
+                                            ast::NestedValue::Array(attr_entry_codes) => {
+                                                let mut entry_codes: Vec<String> = vec![];
+                                                for attr_entry_code in attr_entry_codes {
+                                                    if let ast::NestedValue::Value(entry_code) = attr_entry_code {
+                                                        entry_codes.push(entry_code.clone());
+                                                    }
+                                                }
+                                                attribute.set_entry_codes(EntryCodesValue::Array(entry_codes));
+                                            },
+                                            _ => ()
+
+                                        }
+                                        oca.add_attribute(attribute);
+                                    }
+                                }
+                            }
+                        },
+                        ast::OverlayType::Entry => {
+                            if let Some(ref content) = op.content {
+                                let mut lang_iso = None;
+                                if let Some(ref properties) = content.properties {
+                                    let mut mut_properties = properties.clone();
+                                    let lang = mut_properties.remove("lang");
+                                    if let Some(ast::NestedValue::Value(lang_str)) = lang {
+                                        lang_iso = isolang::Language::from_639_1(lang_str.as_str());
+                                    }
+                                }
+                                if let Some(ref attributes) = content.attributes {
+                                    for (attr_name, attr_type_value) in attributes {
+                                        let mut attribute = oca.attributes.get(attr_name).unwrap().clone();
+                                        match attr_type_value {
+                                            ast::NestedValue::Value(attr_entries) => {
+                                                attribute.set_entry(lang_iso.unwrap(), EntriesElement::Sai(attr_entries.clone()));
+                                            }
+                                            ast::NestedValue::Object(attr_entries) => {
+                                                let mut entries = HashMap::new();
+                                                for (attr_entry_key, attr_entry_value) in attr_entries {
+                                                    if let ast::NestedValue::Value(entry_value) = attr_entry_value {
+                                                        entries.insert(attr_entry_key.clone(), entry_value.clone());
+                                                    }
+                                                }
+                                                attribute.set_entry(lang_iso.unwrap(), EntriesElement::Object(entries));
+                                            },
+                                            _ => ()
+                                        }
+                                        oca.add_attribute(attribute);
+                                    }
+                                }
+                            }
+                        }
                         _ => ()
                     }
                 },
